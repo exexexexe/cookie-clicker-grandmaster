@@ -1,3 +1,12 @@
+# 5.0.1 → 5.0.2
+
+Focus: more cookies per hour.
+- **Godzamok combo (new).** Godzamok goes in the diamond slot (Muridal moves to ruby, Selebrak to jade). The bot sells cheap buildings and buys them straight back in the same frame. Godzamok then gives +1% click power per building sold for 10 s, and CpS never drops. A combo only runs when the expected extra clicks are worth at least 3× the sell loss, and the losses stay under half the bank. It never sells Grandmas (selling the last one cancels the Elder Pledge and pops every wrinkler) or the minigame buildings. Test: 18× more cookies during a 10 s Click frenzy, with every building count restored. Toggle: Settings → *Godzamok sell-and-rebuy combo*.
+- **Stock market: there was no selling bug.** On the real game code, the bot sold about 100 times a day with a median hold of about 85 minutes. The Overview line was misleading: it showed the game's own "profit", which counts every open position as a loss until it's sold. It now shows closed profit and open positions separately.
+- **Stock market rules:** the buy threshold now follows the broker fee (0.6× resting price with no brokers, up to 0.75× with many). The first fast fall above cost sells, without waiting for +3%. The hard cap moved from 1.8× to 2.5×. The new rules came from a search of about 2,000 rule sets (`tools/market-search.mjs`). Paired 20-day runs on the real game code: +1.6% to +6.2% in 9 of 9.
+- **Brokers:** hired when the last 6 h of buying says one pays for itself within a day. The old rule needed about 11 h of CpS in the bank and rarely hired any. Going from 0 to 60 brokers is about +20% market profit.
+- **Settings migration:** a saved 5.0.1 god list and all market numbers reset to the new defaults once. *Buy below* now defaults to 0 (auto).
+
 # 5.0.0 → 5.0.1
 
 Focus: more golden cookies. For an auto-clicker they are the biggest income source (one Click frenzy is x777 clicks for 13 s).

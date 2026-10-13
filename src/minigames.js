@@ -95,9 +95,10 @@
     if (!cfg.pantheon || CCA.locked()) return;
     const M = CCA.minigame('Temple'); if (!M) return;
     let ok = 0;
+    const slots = cfg.godzamok ? cfg.pantheonSlots : cfg.pantheonSlots.filter(k => k !== 'ruin');   // Godzamok only earns with the combo
     const keyOf = (god) => Object.keys(M.gods).find(k => M.gods[k] === god);   // god objects carry no key of their own
     for (let slot = 0; slot < M.slot.length; slot++) {
-      const key = cfg.pantheonSlots[slot], cur = M.slot[slot] >= 0 ? M.godsById[M.slot[slot]] : null;
+      const key = slots[slot], cur = M.slot[slot] >= 0 ? M.godsById[M.slot[slot]] : null;
       const god = key && M.gods[key];
       if (god && cur === god) { ok++; continue; }
       if (cur && !god && GOLDEN_COST.has(keyOf(cur)) && cfg.golden) { M.slotGod(cur, -1); CCA.log(`removed ${cur.name.split(',')[0]} (makes golden cookies rarer)`); continue; }
@@ -105,7 +106,7 @@
       M.useSwap(1); M.slotGod(god, slot);
       CCA.log(`slotted ${god.name.split(',')[0]} in the ${['diamond', 'ruby', 'jade'][slot]} slot`); ok++;
     }
-    CCA.status.pantheon = `${ok}/${Math.min(cfg.pantheonSlots.length, M.slot.length)} gods, ${M.swaps} swaps`;
+    CCA.status.pantheon = `${ok}/${Math.min(slots.length, M.slot.length)} gods, ${M.swaps} swaps`;
   });
 
   // ------------------------------------------------------------------ Dragon
@@ -342,14 +343,16 @@
   CCA.every('garden', 6000, () => { if (cfg.garden && cfg.gardenPlanner) CCA.gardenStep(); });
 
   // ------------------------------------------------------------ Stock market
-  // Prices mean-revert to a resting value (10 + 10*id + bank level - 1) and do not react to trades, so strategies can be
-  // tested offline on a port of the game's tick. 90 simulated days, 18 goods:
-  //   buy <= 0.7x rest (not falling), sell on a fast fall (mode 4) once 3% above basis, or at 1.8x rest.
-  //   v4's extra "d < -0.3" exit sold on noise: -13% profit without brokers. "Sell at rest" would be -35%.
+  // Prices mean-revert to a resting value (10 + 10*id + bank level - 1) and do not react to trades, so rules can be
+  // tested offline on a port of the game's tick (tools/market.mjs). tools/market-search.mjs tried ~2,000 rule sets over
+  // 40 simulated days; the winner, about 5% above v5.0.1's rules:
+  //   buy <= 0.6x rest (no brokers, 20% fee) up to 0.75x rest (60 brokers, 1% fee), not while falling;
+  //   sell on the first fast fall (mode 4) above cost, or at 2.5x rest. "Sell at rest" would be -35%.
+  // Brokers matter more than the thresholds: 0 -> 60 brokers is +27% profit, see marketUpkeep.
   // Basis is per share in $ (1$ = 1 s of highest raw CpS) incl. the broker fee, persisted; unknown holdings (bought by
   // hand, or before a restore) get the current price as basis instead of being stuck forever as in v4.
-  // Cash: only cookies above the Lucky bank, and only while buildings pay back slower than marketGateSec. At those
-  // paybacks the market returns more than buildings (about 14x the $ tied up, per day, in the sims).
+  // Cash: only cookies above the Lucky bank, and only while buildings pay back slower than marketGateSec. The market
+  // returns 10-15x the $ tied up per day in the sims, which beats a building that pays back in more than ~2 h.
   const MKEY = 'cca5.market';
   let basis = {};
   try { basis = JSON.parse(localStorage.getItem(MKEY) || '{}'); } catch (e) {}
@@ -360,9 +363,10 @@
     const M = CCA.minigame('Bank'); if (!M) return;
     const g = G();
     const over = 1 + 0.2 * Math.pow(0.95, M.brokers);
+    const buyBelow = Number(cfg.marketBuyBelow) > 0 ? Number(cfg.marketBuyBelow) : 0.75 - 0.75 * (over - 1);
     const cpsHi = g.cookiesPsRawHighest || 1;
     const cps = g.unbuffedCps || g.cookiesPs || 1;
-    let held = 0, worth = 0;
+    let held = 0, worth = 0, cost = 0;
     const buys = [];
     for (const good of M.goodsById) {
       if (!good.active) continue;
@@ -371,7 +375,7 @@
       else if (!basis[good.id]) { basis[good.id] = p * over; basisDirty = true; }
       if (good.stock > 0) {
         const b = basis[good.id];
-        const sell = p > b && ((good.mode === 4 && p >= b * 1.03) || p >= rest * cfg.marketSellAt);
+        const sell = p > b && (good.mode === 4 || p >= rest * cfg.marketSellAt);
         if (sell && good.last !== 1) {
           const n = good.stock;
           if (M.sellGood(good.id, n)) {
@@ -382,10 +386,10 @@
             continue;
           }
         }
-        held++; worth += good.stock * p;
+        held++; worth += good.stock * p; cost += good.stock * b;
       }
       const room = M.getGoodMaxStock(good) - good.stock;
-      const cheap = p <= rest * cfg.marketBuyBelow && good.d > -0.15 && good.mode !== 4 && good.mode !== 2;
+      const cheap = p <= rest * buyBelow && good.d > -0.15 && good.mode !== 4 && good.mode !== 2;
       if (room > 0 && cheap && good.last !== 2 && (!basis[good.id] || p * over < basis[good.id])) buys.push({ good, p, rest, room });
     }
     // buy the deepest discounts first with the cash the economy can spare
@@ -398,23 +402,37 @@
       const had = good.stock, c0 = g.cookies;
       if (!M.buyGood(good.id, n)) continue;
       const spent = c0 - g.cookies; budget -= spent;
+      volume.push({ t: Date.now(), v: p * over * n });
       basis[good.id] = had > 0 ? (basis[good.id] * had + p * over * n) / (had + n) : p * over; basisDirty = true;
       CCA.stat('trades');
       CCA.record('market', 'bought ' + good.symbol, n, spent, `$${p.toFixed(2)} (rest $${M.getRestingVal(good.id)})`);
-      held += had ? 0 : 1; worth += n * p;
+      held += had ? 0 : 1; worth += n * p; cost += n * p * over;
     }
-    CCA.status.market = `${held} held ($${CCA.fmt(worth)}), run profit $${CCA.fmt(M.profit)}` + (gateOpen ? '' : ' · buildings first');
+    // the game's own "profit" counts open positions as losses until they are sold; show closed trades and open ones apart
+    const closed = M.profit + cost, open = worth - cost, sign = (v) => (v < 0 ? '-$' : '+$') + CCA.fmt(Math.abs(v));
+    CCA.status.market = `closed ${sign(closed)} this run · ${held} held (${sign(open)} open)` + (gateOpen ? '' : ' · buildings first');
   };
 
   // Upkeep: brokers cut the 20% fee (x0.95 each); offices raise stock caps and lead to "Pyramid scheme". A broker costs
-  // 20 min of CpS and is hired when that is <= 3% of the bank. An office upgrade sacrifices cursors (rebought by the
-  // optimizer) when cursors cover cost + 20%. Both reset on ascension.
+  // 20 min of CpS ($1200) and saves 5% of the remaining fee on every buy, so it is hired when the buy volume of the last
+  // 6 h says it pays for itself within a day, from cash above the Lucky bank (or when it is under 3% of the bank).
+  // v5.0.1 only used the 3% rule and rarely hired any. An office upgrade sacrifices cursors (rebought by the optimizer)
+  // when cursors cover cost + 20%. Brokers and offices reset on ascension.
+  const volume = [];
+  const dailyVolume = () => {
+    const now = Date.now();
+    while (volume.length && now - volume[0].t > 6 * 3600e3) volume.shift();
+    if (!volume.length) return 0;
+    return volume.reduce((s, x) => s + x.v, 0) * 86400e3 / Math.max(now - volume[0].t, 2 * 3600e3);
+  };
   CCA.marketUpkeep = () => {
     const M = CCA.minigame('Bank'); if (!M) return;
     const g = G();
-    if (M.brokers < M.getMaxBrokers() && M.getBrokerPrice() <= g.cookies * 0.03) {
-      const b = document.getElementById('bankBrokersBuy'), price = M.getBrokerPrice();
-      if (b) { b.click(); if (M.brokers) CCA.record('market', 'broker #' + M.brokers, 1, price); }
+    const saving = dailyVolume() * 0.2 * Math.pow(0.95, M.brokers) * 0.05;                   // $ per day
+    const spare = g.cookies - (Number(cfg.bankMult) || 0) * (g.unbuffedCps || g.cookiesPs || 0);
+    if (M.brokers < M.getMaxBrokers() && !CCA.locked() && (M.getBrokerPrice() <= g.cookies * 0.03 || (saving >= 1200 && M.getBrokerPrice() <= spare))) {
+      const b = document.getElementById('bankBrokersBuy'), price = M.getBrokerPrice(), had = M.brokers;
+      if (b) { b.click(); if (M.brokers > had) CCA.record('market', 'broker #' + M.brokers, 1, price); }
     }
     const of = M.offices[M.officeLevel], cur = g.Objects['Cursor'];
     if (!CCA.locked() && of && of.cost && cur.amount >= of.cost[0] * 1.2 && cur.level >= of.cost[1]) {

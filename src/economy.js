@@ -209,5 +209,70 @@
     return n;
   };
 
+  // ---- Godzamok combo ----------------------------------------------------------------------------
+  // With Godzamok slotted, selling buildings starts Devastation: clicks +1% per building sold for 10 s (ruby 0.5%, jade
+  // 0.25%). Buying them straight back in the same frame keeps the buff and CpS never drops, so the only cost is the
+  // sell loss (75% of their price, less with Earth Shatterer). Late in a run the cheap buildings cost almost nothing next
+  // to 10 s of clicks, and during a Click frenzy a combo multiplies x777 clicks again.
+  // Value per building sold = measured clicks/s x click value integrated over the next 10 s (buffs that end sooner are
+  // accounted for) x 1%. A building type is sold only when that beats its sell loss 3x, and all losses together stay
+  // under half the bank. Never sold: Grandmas (selling the last one cancels the Elder Pledge and pops every wrinkler)
+  // and the minigame buildings.
+  const NO_SELL = new Set(['Grandma', 'Farm', 'Bank', 'Temple', 'Wizard tower']);
+  const samples = [];
+  function clicksPerSec() {
+    const t = performance.now(), c = CCA.stats.clicks || 0;
+    samples.push({ t, c });
+    while (samples.length > 2 && t - samples[0].t > 2500) samples.shift();
+    const a = samples[0];
+    return t - a.t > 900 ? (c - a.c) * 1000 / (t - a.t) : 0;   // measured: background tabs throttle the click timer
+  }
+  function clickValue(g, T) {                            // cookies per click, summed over the next T seconds
+    const bs = []; let all = 1;
+    for (const n in g.buffs) { const b = g.buffs[n]; if (b.multClick && b.multClick !== 1) { bs.push({ m: b.multClick, t: b.time / g.fps }); all *= b.multClick; } }
+    bs.sort((a, b) => a.t - b.t);
+    let sum = 0, at = 0, m = all;
+    for (const b of bs) { const end = Math.min(b.t, T); if (end > at) { sum += m * (end - at); at = end; } m /= b.m; }
+    if (T > at) sum += m * (T - at);
+    return g.computedMouseCps / all * sum;
+  }
+  let lastComboLog = 0;
+  CCA.godzamok = () => {
+    const g = G(), cps = clicksPerSec();
+    if (!cfg.godzamok || !cfg.master || !cfg.clicker || !CCA.ok() || CCA.locked() || !g.hasGod) return;
+    const lvl = g.hasGod('ruin');
+    if (!lvl || g.hasBuff('Devastation') || g.hasBuff('Cursed finger') || (CCA.clickAllowed && !CCA.clickAllowed(g)) || cps < 5) return;
+    const k = [0, 0.01, 0.005, 0.0025][lvl], per = cps * clickValue(g, 10) * k;
+    const opts = [];
+    for (const o of g.ObjectsById) {
+      if (o.locked || o.amount < 1 || NO_SELL.has(o.name)) continue;
+      const A = o.amount, back = o.getReverseSumPrice(A);   // slightly under the real refund (the game sells at the higher price)
+      o.amount = 0; let rebuy; try { rebuy = o.getSumPrice(A); } finally { o.amount = A; }
+      const loss = rebuy - back;
+      if (A * per >= 3 * loss) opts.push({ o, A, loss });
+    }
+    if (!opts.length) return;
+    opts.sort((a, b) => a.loss / a.A - b.loss / b.A);
+    const picks = []; let loss = 0, n = 0;
+    for (const x of opts) if (loss + x.loss <= g.cookies * 0.5) { picks.push(x); loss += x.loss; n += x.A; }
+    if (n < 10) return;
+    const prevMode = g.buyMode, c0 = g.cookies, frenzy = Object.values(g.buffs).some(b => b.multClick > 1);
+    g.buyMode = 1;                                       // buy() would sell in sell mode
+    try {
+      for (const x of picks) x.o.sell(x.A);
+      for (const x of picks) x.o.buy(x.A);
+    } finally { g.buyMode = prevMode; }
+    const short = picks.filter(x => x.o.amount < x.A);
+    if (short.length) CCA.log('Godzamok: could not rebuy ' + short.map(x => x.o.name).join(', '));
+    const spent = c0 - g.cookies, gain = per * n, pct = Math.round(n * k * 100);
+    CCA.stat('combos'); CCA.stat('comboGain', gain); CCA.stat('comboCost', spent);
+    CCA.status.godzamok = `${CCA.stats.combos} combos this session, last +${pct}% clicks, est. ${CCA.fmt(CCA.stats.comboGain / Math.max(1, CCA.stats.comboCost))}x return`;
+    if (frenzy || Date.now() - lastComboLog > 60000) {
+      lastComboLog = Date.now();
+      CCA.log(`Godzamok: sold and rebought ${n} buildings (${picks.map(x => x.o.name).join(', ')}) for +${pct}% clicks, cost ${CCA.fmt(spent)}, worth ≈${CCA.fmt(gain)}`);
+    }
+  };
+  CCA.every('godzamok', 250, () => CCA.godzamok());
+
   console.log('[CCA] economy loaded');
 })();

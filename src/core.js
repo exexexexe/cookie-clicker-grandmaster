@@ -5,7 +5,7 @@
 (() => {
   'use strict';
   if (window.CCA) return;
-  const CCA = window.CCA = { version: '5.0.1', stats: {}, status: {}, logs: [], errors: {}, perf: {}, tasks: {} };
+  const CCA = window.CCA = { version: '5.0.2', stats: {}, status: {}, logs: [], errors: {}, perf: {}, tasks: {} };
 
   const DEFAULTS = {
     master: true,
@@ -23,14 +23,16 @@
     // minigames
     grimoire: true, combo: true,
     // diamond, ruby, jade. Golden cookies (Click frenzy = x777 clicks) are the biggest income for an auto-clicker, so no
-    // god that makes them rarer: Muridal (+15% clicks), Selebrak (golden cookies 3% MORE often in any season, better drops).
-    pantheon: true, pantheonSlots: ['labor', 'seasons'],
+    // god that makes them rarer. Godzamok powers the sell-and-rebuy combo (+1% clicks per building sold, see economy.js),
+    // Muridal +10% clicks, Selebrak makes golden cookies a little more frequent in any season.
+    pantheon: true, pantheonSlots: ['ruin', 'labor', 'seasons'],
+    godzamok: true,                        // sell cheap buildings and buy them straight back for Godzamok's click buff
     dragon: true,
     wrinklers: true,
     garden: true, gardenPlanner: true,
     market: true,
-    marketBuyBelow: 0.7,                   // buy when price <= this x resting value
-    marketSellAt: 1.8,                     // sell everything at this x resting value (a fast fall also triggers a sale above basis)
+    marketBuyBelow: 0,                     // buy when price <= this x resting value; 0 = auto from the broker fee (0.6 to 0.75)
+    marketSellAt: 2.5,                     // sell at this x resting value; the usual exit is the first fast fall above cost
     marketSpendPct: 0.8,                   // share of cookies above the Lucky bank the market may use per tick
     marketGateSec: 3600,                   // ...only while the best building/upgrade pays back slower than this
     seasons: true,
@@ -40,13 +42,15 @@
     // meta
     backups: true,
     ascend: true, ascendMinMinutes: 15, ascendMinGain: 1.05,
+    cfgVer: 502,
     ui: { collapsed: false, tab: 'overview', filter: 'all' },
   };
   const KEY = 'cca5.cfg';
   const cfg = CCA.cfg = JSON.parse(JSON.stringify(DEFAULTS));
   try {
     const cur = localStorage.getItem(KEY);
-    if (cur) Object.assign(cfg, JSON.parse(cur));
+    const saved = cur ? JSON.parse(cur) : null;
+    if (saved) Object.assign(cfg, saved);
     else {                                 // migrate plain switches from v4; its tuning defaults are not carried over
       const old = JSON.parse(localStorage.getItem('cca4.cfg') || '{}');
       for (const k of ['master', 'clicker', 'golden', 'wrath', 'buyBuildings', 'buyUpgrades', 'lumps', 'spendLumps', 'grimoire',
@@ -54,7 +58,12 @@
         if (k in old) cfg[k] = old[k];
     }
     cfg.ui = Object.assign({}, DEFAULTS.ui, cfg.ui);
-    if (JSON.stringify(cfg.pantheonSlots) === '["mother","labor","industry"]') cfg.pantheonSlots = DEFAULTS.pantheonSlots.slice();   // 5.0.0 default
+    if (saved && !(saved.cfgVer >= 502)) {
+      // older defaults -> current ones; market tuning is reset because the old numbers were worse (tools/market-search.mjs)
+      if (['["mother","labor","industry"]', '["labor","seasons"]'].includes(JSON.stringify(cfg.pantheonSlots))) cfg.pantheonSlots = DEFAULTS.pantheonSlots.slice();
+      for (const k of ['marketBuyBelow', 'marketSellAt', 'marketSpendPct', 'marketGateSec']) cfg[k] = DEFAULTS[k];
+      cfg.cfgVer = DEFAULTS.cfgVer;
+    }
   } catch (e) {}
   CCA.defaults = DEFAULTS;
   CCA.save = () => { try { localStorage.setItem(KEY, JSON.stringify(cfg)); } catch (e) {} };

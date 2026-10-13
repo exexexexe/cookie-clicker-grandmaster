@@ -39,6 +39,7 @@ Leave it running in a tab and it clicks, buys, casts spells, tends the garden, t
 - **Clicks** the big cookie and every golden cookie and reindeer.
 - **Buys** the building or upgrade that pays for itself fastest, and keeps a cookie reserve so golden cookies pay out big.
 - **Sugar lumps:** times each harvest so your next lump is usually a **golden** one (2–7 lumps instead of 1). Lumps are the slowest part of 100%, so this matters a lot.
+- **Godzamok combo:** sells cheap buildings and buys them right back for a big click boost, especially during Click frenzies.
 - **Minigames:** predicts spell outcomes in the Grimoire, picks gods in the Pantheon, raises the dragon, breeds every garden seed, and trades on the stock market.
 - **Achievement hunting:** dozens of one-off achievements (hidden clicks, the madeleine, gift codes, wrinkler poking, seasons, Neverclick and Hardcore runs…).
 - **Ascends** when your progress starts slowing down, and spends your leftover cookies on achievements first.
