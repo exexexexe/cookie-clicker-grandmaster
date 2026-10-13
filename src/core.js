@@ -5,7 +5,7 @@
 (() => {
   'use strict';
   if (window.CCA) return;
-  const CCA = window.CCA = { version: '5.0.0', stats: {}, status: {}, logs: [], errors: {}, perf: {}, tasks: {} };
+  const CCA = window.CCA = { version: '5.0.1', stats: {}, status: {}, logs: [], errors: {}, perf: {}, tasks: {} };
 
   const DEFAULTS = {
     master: true,
@@ -22,7 +22,9 @@
     lumpTricks: true,                      // at harvest: Rigidel swap-in, Dragon's Curve aura, building count ending in 0
     // minigames
     grimoire: true, combo: true,
-    pantheon: true, pantheonSlots: ['mother', 'labor', 'industry'],   // diamond, ruby, jade
+    // diamond, ruby, jade. Golden cookies (Click frenzy = x777 clicks) are the biggest income for an auto-clicker, so no
+    // god that makes them rarer: Muridal (+15% clicks), Selebrak (golden cookies 3% MORE often in any season, better drops).
+    pantheon: true, pantheonSlots: ['labor', 'seasons'],
     dragon: true,
     wrinklers: true,
     garden: true, gardenPlanner: true,
@@ -52,6 +54,7 @@
         if (k in old) cfg[k] = old[k];
     }
     cfg.ui = Object.assign({}, DEFAULTS.ui, cfg.ui);
+    if (JSON.stringify(cfg.pantheonSlots) === '["mother","labor","industry"]') cfg.pantheonSlots = DEFAULTS.pantheonSlots.slice();   // 5.0.0 default
   } catch (e) {}
   CCA.defaults = DEFAULTS;
   CCA.save = () => { try { localStorage.setItem(KEY, JSON.stringify(cfg)); } catch (e) {} };

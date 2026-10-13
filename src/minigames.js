@@ -69,10 +69,13 @@
       if (SELF.has(pred.force) || buffed || patient) { CCA.stat('combos'); cast(hof, `FtHoF -> ${pred.force}${buffed ? ' (on a buff)' : ''}`); }
       return;                                                           // stacker: wait for a buff
     }
-    // Bad or redundant outcome: burn it with a cheap spell. A burner predicted to backfire is skipped when it is
-    // Haggler's charm (its backfire makes upgrades pricier for an hour); a backfiring Conjure only costs cookies.
+    // Bad or redundant outcome: burn it with a throwaway spell, which advances the spell counter. Mana is what limits
+    // Force the Hand of Fate casts, so the cheapest burner predicted to SUCCEED goes first: Haggler's charm (10 + 10%)
+    // before Conjure baked goods (2 + 40%). Haggler's is never cast when it would backfire (upgrades pricier for an
+    // hour); a backfiring Conjure only loses a few minutes of cookies.
     const wins = (sp) => { Math.seedrandom(g.seed + '/' + M.spellsCastTotal); const r = Math.random(); Math.seedrandom(); return r < 1 - M.getFailChance(sp); };
-    const burners = [conj, hag].filter(Boolean).filter(sp => sp !== hag || wins(sp)).sort((a, b) => wins(b) - wins(a));
+    const burners = [hag, conj].filter(Boolean).map(sp => ({ sp, win: wins(sp), cost: M.getSpellCost(sp) }))
+      .filter(b => b.sp !== hag || b.win).sort((a, b) => (b.win - a.win) || (a.cost - b.cost)).map(b => b.sp);
     for (const sp of burners) {
       if (M.magic >= M.getSpellCost(sp) + costH) { CCA.stat('burns'); return cast(sp, `skipped ${pred.win ? '' : 'a backfiring '}${pred.force} with ${sp.name}`); }
     }
@@ -84,22 +87,24 @@
   });
 
   // ---------------------------------------------------------------- Pantheon
-  // Placing a god costs one worship swap, exactly like dragging it in the game (v4 placed into empty slots for free,
-  // which the UI never allows). Swaps refill one per hour at 2, per 4 h at 1, per 16 h at 0, so the last one is kept.
-  // Holobore is never a sensible pick here: clicking any golden cookie unslots it and burns all swaps.
+  // Placing a god costs one worship swap, exactly like dragging it in the game; taking one out is free. Swaps refill one
+  // per hour at 2, per 4 h at 1, per 16 h at 0, so the last one is kept. Gods that make golden cookies rarer (Mokalsium,
+  // Jeremy, Skruuia) or that leave on the first golden click (Holobore) are removed from slots the config leaves open.
+  const GOLDEN_COST = new Set(['mother', 'industry', 'scorn', 'asceticism']);
   CCA.every('pantheon', 10000, () => {
     if (!cfg.pantheon || CCA.locked()) return;
     const M = CCA.minigame('Temple'); if (!M) return;
     let ok = 0;
-    cfg.pantheonSlots.forEach((key, slot) => {
-      const god = M.gods[key];
-      if (!god || slot >= M.slot.length) return;
-      if (M.slot[slot] === god.id) { ok++; return; }
-      if (key === 'asceticism' && cfg.golden) return;
-      if (M.swaps < 2) return;
+    const keyOf = (god) => Object.keys(M.gods).find(k => M.gods[k] === god);   // god objects carry no key of their own
+    for (let slot = 0; slot < M.slot.length; slot++) {
+      const key = cfg.pantheonSlots[slot], cur = M.slot[slot] >= 0 ? M.godsById[M.slot[slot]] : null;
+      const god = key && M.gods[key];
+      if (god && cur === god) { ok++; continue; }
+      if (cur && !god && GOLDEN_COST.has(keyOf(cur)) && cfg.golden) { M.slotGod(cur, -1); CCA.log(`removed ${cur.name.split(',')[0]} (makes golden cookies rarer)`); continue; }
+      if (!god || (key === 'asceticism' && cfg.golden) || M.swaps < 2) continue;
       M.useSwap(1); M.slotGod(god, slot);
       CCA.log(`slotted ${god.name.split(',')[0]} in the ${['diamond', 'ruby', 'jade'][slot]} slot`); ok++;
-    });
+    }
     CCA.status.pantheon = `${ok}/${Math.min(cfg.pantheonSlots.length, M.slot.length)} gods, ${M.swaps} swaps`;
   });
 

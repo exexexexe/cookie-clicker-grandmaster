@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Cookie Clicker Grandmaster",
-  "version": "5.0.0",
+  "version": "5.0.1",
   "description": "Autoplay for Cookie Clicker aimed at 100% achievements: payback optimizer, timed golden sugar lumps, predictive Grimoire, garden planner, tested stock market, achievement hunters, growth-based auto-ascend.",
   "browser_specific_settings": {
     "gecko": { "id": "cookie-clicker-grandmaster@local", "strict_min_version": "128.0" }

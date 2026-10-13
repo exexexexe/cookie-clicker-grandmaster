@@ -16,8 +16,8 @@ Autoplay for `orteil.dashnet.org/cookieclicker` (game v2.058), built for reachin
 ## How it plays
 - **Purchases.** Every building and upgrade is tried virtually with the game's own CpS calculation and ranked by payback time. Buffs are excluded so a Click frenzy does not make mouse upgrades look amazing. A Lucky bank (6000× CpS) is kept. Cheap "Have N buildings" thresholds are topped up.
 - **Lumps.** The next lump's type is decided by the exact millisecond you harvest. The bot scans the coming milliseconds with the game's own function and clicks on one that gives the type it wants. Missing types (bifurcated, caramelized, meaty) are targeted once each, then golden every time. At harvest it also briefly slots Rigidel (−1 h), switches the dragon to Dragon's Curve (−5%), and rounds the building count to a multiple of 10. Lumps go to the minigames first, then farm level 9 (full garden), then levels towards 10.
-- **Grimoire.** The Force the Hand of Fate outcome is predicted before casting. Bad outcomes are skipped with a cheap spell; good ones are stacked on buffs.
-- **Pantheon.** Mokalsium, Muridal and Jeremy. Each placement costs a swap, as in the game.
+- **Grimoire.** The Force the Hand of Fate outcome is predicted before casting. Bad outcomes are skipped with the cheapest spell predicted to succeed (usually Haggler's charm); good ones are stacked on buffs.
+- **Pantheon.** Muridal (diamond) and Selebrak (ruby). No god that makes golden cookies rarer. Each placement costs a swap, as in the game.
 - **Dragon.** Levels are trained when rebuying the sacrificed buildings is cheap. Full training for *Here be dragon* happens right before ascending.
 - **Garden.** A mutation planner works through every seed. It also fills all 36 tiles once (*In the garden of Eden*) and sacrifices the seed log when it is complete (+10 lumps, *Seedless to nay*).
 - **Stock market.** Buys at ≤ 0.7× the resting price. Sells on a fast fall once 3% above cost, or at 1.8× the resting price (rules chosen in `tools/`). It only uses cookies above the Lucky bank, and only while buildings pay back slower than 1 hour.

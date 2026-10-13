@@ -1,3 +1,9 @@
+# 5.0.0 → 5.0.1
+
+Focus: more golden cookies. For an auto-clicker they are the biggest income source (one Click frenzy is x777 clicks for 13 s).
+- **Pantheon:** Muridal (+15% clicks) in diamond and Selebrak in ruby (golden cookies 3% more often during any season, better drop rates); jade stays empty. Mokalsium (golden cookies −15%) and Jeremy (−10%/−3%) cost more in golden cookies than they add, so they are no longer used and are removed (free) if slotted. A saved 5.0.0 default is migrated automatically.
+- **Grimoire:** when a bad Force the Hand of Fate outcome is skipped, the cheapest throwaway spell predicted to succeed is used: Haggler's charm (10 + 10% mana) before Conjure baked goods (2 + 40%). More mana is left for Force the Hand of Fate. In tests it picked Haggler's 86% of the time and never when it would backfire.
+
 # v4.0.1 → v5.0.0
 
 ## Bugs fixed
