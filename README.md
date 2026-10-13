@@ -11,14 +11,13 @@ Leave it running in a tab and it clicks, buys, casts spells, tends the garden, t
 
 ## Install (2 minutes)
 
-You only need the files from this repo, nothing else.
-
-1. Click the green **Code** button above → **Download ZIP**.
+1. Download **[cookie-clicker-grandmaster.zip](https://github.com/exexexexe/cookie-clicker-grandmaster/releases/latest/download/cookie-clicker-grandmaster.zip)** from the latest release.
+   (Not the green *Code → Download ZIP* button: that one wraps everything in an extra folder.)
 
 **Firefox (recommended)**
 
 2. Type `about:debugging#/runtime/this-firefox` in the address bar.
-3. Click **Load Temporary Add-on…** and pick the ZIP you just downloaded.
+3. Click **Load Temporary Add-on…** and pick the ZIP you just downloaded. No need to unzip.
 4. Open [Cookie Clicker](https://orteil.dashnet.org/cookieclicker/). The panel appears in the bottom-left corner.
 
 > Firefox removes temporary add-ons when you close it, so you'll redo step 2–3 after a restart.
