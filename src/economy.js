@@ -3,7 +3,7 @@
   'use strict';
   const CCA = window.CCA, cfg = CCA.cfg, G = CCA.G;
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-  const rate = () => (cfg.clicker ? clamp(Number(cfg.clickRate) || 0, 0, 50) : 0);
+  const rate = () => (cfg.clicker ? clamp(Number(cfg.clickRate) || 30, 1, 50) : 0);   // same fallback as the click timer
 
   // ---------------------------------------------------------------- clicker
   // The Shimmering veil (+50% CpS) breaks on the first click of a run. That is deliberate: in game code the veil is up
@@ -12,7 +12,7 @@
   // each run's first click has the Reinforced membrane's 10% chance to be protected.
   let clickTimer = null;
   function click() {
-    if (!cfg.master || !cfg.clicker || !CCA.ok()) return;
+    if (!cfg.master || !cfg.clicker || !CCA.ok() || CCA.popping) return;
     const g = G();
     if (CCA.clickAllowed && !CCA.clickAllowed(g)) return;
     const before = g.cookieClicks;
@@ -20,8 +20,8 @@
     CCA.stat('clicks', g.cookieClicks - before);
   }
   CCA.setClickRate = () => {
-    clearInterval(clickTimer);
-    clickTimer = setInterval(click, Math.max(20, 1000 / clamp(Number(cfg.clickRate) || 30, 1, 50)));
+    CCA.clearInterval(clickTimer);
+    clickTimer = CCA.setInterval(click, Math.max(20, 1000 / clamp(Number(cfg.clickRate) || 30, 1, 50)));
   };
   CCA.setClickRate();
 
@@ -56,7 +56,13 @@
     return { c: c > 0 ? c : 1, k: k > 0 ? k : 1 };
   }
   CCA.buffMult = buffMult;
-  const income = (g, m) => (g.unbuffedCps || 0) + g.computedMouseCps / m.k * rate();
+  // click power is mostly a share of CpS (mouse upgrades), and that CpS includes Frenzy & co., so CpS buffs are divided
+  // out of the clicks too; otherwise a Frenzy made mouse upgrades look 7x better than they are
+  const income = (g, m) => (g.unbuffedCps || 0) + g.computedMouseCps / (m.k * m.c) * rate();
+  // Golden-cookie upgrades add nothing to unbuffed income, so they used to wait until they cost <= 1% of the bank.
+  // They are valued instead as a share of income: golden cookies (Frenzy, Click frenzy, Lucky, combos) are taken to be
+  // about half of an auto-clicker's earnings, and each upgrade's number is how much it grows that half.
+  const GOLDEN = { 'Lucky day': 0.8, 'Serendipity': 0.8, 'Get lucky': 0.8, 'Golden goose egg': 0.05, 'Dragon fang': 0.03 };
 
   function candidates(g) {
     const out = [];
@@ -68,7 +74,7 @@
           if (o.locked) continue;
           const price = o.getPrice();
           o.amount++; g.BuildingsOwned++;
-          try { g.CalculateGains(); } finally { o.amount--; g.BuildingsOwned--; }
+          try { CCA.quietGains(g); } finally { o.amount--; g.BuildingsOwned--; }
           out.push({ kind: 'b', ref: o, name: o.name, price, d: income(g, m) - base });
         }
       }
@@ -78,11 +84,13 @@
           if (u.priceLumps > 0 || u.clickFunction || (u.isVaulted && u.isVaulted())) continue;
           const price = u.getPrice();
           u.bought = 1;
-          try { g.CalculateGains(); } finally { u.bought = 0; }
-          out.push({ kind: 'u', ref: u, name: u.name, price, d: income(g, m) - base });
+          try { CCA.quietGains(g); } finally { u.bought = 0; }
+          let d = income(g, m) - base;
+          if (d <= 0 && GOLDEN[u.name]) d = base * 0.5 * GOLDEN[u.name];
+          out.push({ kind: 'u', ref: u, name: u.name, price, d });
         }
       }
-    } finally { g.CalculateGains(); g.cookiesPsRawHighest = hi; }
+    } finally { CCA.quietGains(g); g.cookiesPsRawHighest = hi; }
     return out;
   }
 
@@ -215,7 +223,8 @@
   // sell loss (75% of their price, less with Earth Shatterer). Late in a run the cheap buildings cost almost nothing next
   // to 10 s of clicks, and during a Click frenzy a combo multiplies x777 clicks again.
   // Value per building sold = measured clicks/s x click value integrated over the next 10 s (buffs that end sooner are
-  // accounted for) x 1%. A building type is sold only when that beats its sell loss 3x, and all losses together stay
+  // accounted for) x 1%. A building type is sold only when that beats its sell loss godzamokMargin times (6.1: 2x, was
+  // 3x; the estimate has been reliable, see the "est. Nx return" on the Godzamok row), and all losses together stay
   // under half the bank. Never sold: Grandmas (selling the last one cancels the Elder Pledge and pops every wrinkler)
   // and the minigame buildings.
   const NO_SELL = new Set(['Grandma', 'Farm', 'Bank', 'Temple', 'Wizard tower']);
@@ -249,7 +258,7 @@
       const A = o.amount, back = o.getReverseSumPrice(A);   // slightly under the real refund (the game sells at the higher price)
       o.amount = 0; let rebuy; try { rebuy = o.getSumPrice(A); } finally { o.amount = A; }
       const loss = rebuy - back;
-      if (A * per >= 3 * loss) opts.push({ o, A, loss });
+      if (A * per >= (Number(cfg.godzamokMargin) || 3) * loss) opts.push({ o, A, loss });
     }
     if (!opts.length) return;
     opts.sort((a, b) => a.loss / a.A - b.loss / b.A);

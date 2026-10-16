@@ -12,13 +12,23 @@ Tested in headless Chromium on the real game code (v2.058, from a public mirror 
 | Godzamok | Gods migrated to Godzamok / Muridal / Selebrak. 10 s of Click frenzy: 18× the cookies of the same window without the combo; building counts identical afterwards. |
 | Ascension | Dragon trained, 387 pre-ascend purchases, backup, ascend, 35 heavenly upgrades, 2 permanent slots filled (kittens owned in the new run). |
 | Hunters | Olden days, No time like the present and Tabloid addiction earned. Dialogs and menus left as they were. Wrinkler poked repeatedly without dying. |
-| Challenges | Neverclick uses exactly 15 clicks; Hardcore buys 0 upgrades. |
 | Performance | Late game: frames p50 16.7 ms / p95 16.8 ms while buying ~4,000 items in 90 s. CalculateGains 0.07 ms. |
 
 Market rules come from a port of the game's tick (`tools/market.mjs`, `tools/market-search.mjs`): 3 × 40 simulated days, 18 goods, bank level 1 and 10, 0–60 brokers.
 
+## 6.x (late-game test save, same setup)
+
+| Area | Result |
+|---|---|
+| Virtual purchases | No CpS achievements awarded beyond the real highest CpS. |
+| Pantheon (6.1.7) | Emptied temple filled to Mokalsium / Godzamok / Muridal in 90 s; with 1 swap the empty diamond slot was filled at once; temple screen matched the data. |
+| Wrinklers (6.1.5–6.1.6) | Moistburster sprint started after Elder Pact (estimate ~1 h), popped on sight and held ascension; without Unholy bait wrinklers stayed attached. Aura stayed on Dragon Guts through 3 Elder Pledges (6.1.5: 5 aura changes in 90 s). |
+| Dragon (6.1.2–6.1.3) | Mid-run training 25 → 27. Breath of Milk kept over Dragon Guts when clicks dominate income. |
+| Ascension (6.1.4) | A Frenzy injected mid-sequence did not restart it; ascended in 16 s. |
+| Settings (6.1.0) | Presets, ★ markers and Reset to recommended; Balanced applied once on update. |
+
 ## Not verified
 - Real Firefox (Chromium only).
-- Multi-day behaviour: the ascend rule, the garden planner over weeks, season rotation.
+- Multi-day behaviour: the ascend rule, the garden planner over weeks, season rotation (partly confirmed by real use since 6.0).
 - *Liquid assets* ($10M profit in one run) depends on long late-game runs; the ascend hold helps but is untested end to end.
 - Lump timing needs 1 ms `Date.now()`. With Firefox's `privacy.resistFingerprinting` (100 ms) it adapts, but golden lumps become rarer.

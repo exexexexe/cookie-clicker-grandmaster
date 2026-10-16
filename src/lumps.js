@@ -83,8 +83,7 @@
   }
   function slotGod(M, god, slot) {                           // same as dragging a god onto a slot: always costs one swap
     if (!god || M.swaps < 1 || M.slot[slot] === god.id) return false;
-    M.useSwap(1); M.slotGod(god, slot);
-    return true;
+    return CCA.placeGod(M, god, slot);
   }
   function roundBuildings(g) {                               // make the total end in 0: buy a few cheap ones, or sell cursors
     const r = g.BuildingsOwned % 10;
@@ -102,7 +101,7 @@
     return g.BuildingsOwned % 10 === 0;
   }
 
-  let prep = null, pending = null, lead = 40;
+  let prep = null, pending = null, lead = 40, misses = 0;
   function applyBoosts(g) {
     prep = { aura: null, god: null };
     if (!cfg.lumpTricks) return;
@@ -137,14 +136,16 @@
     pick = pick || fallback;
     pending = pick;
     CCA.status.lumpNext = TYPES[pick.ty];
-    setTimeout(() => fire(pick), Math.max(0, pick.t - Date.now() - lead));
+    CCA.setTimeout(() => fire(pick), Math.max(0, pick.t - Date.now() - lead));
   }
   function fire(pick) {
     const g = G();
     const limit = performance.now() + lead + 30;
     while (Date.now() < pick.t && performance.now() < limit) { /* spin to the exact millisecond */ }
     if (Date.now() !== pick.t || !CCA.ok()) {               // missed it (throttled tab, busy frame): retry with more lead
-      lead = Math.min(lead * 2, 2500); pending = null; return;
+      // put the dragon aura and the diamond god back now; the next attempt applies them again (6.1.4: they used to stay,
+      // and a lump that went overripe meanwhile left Dragon's Curve and Rigidel in place for good)
+      lead = Math.min(lead * 2, 400); misses++; pending = null; restoreBoosts(g); CCA.lock('lump', 0); return;
     }
     g.computeLumpTimes();
     if (Date.now() - g.lumpT < g.lumpRipeAge) {              // something moved the building count: a click now would be a 50% early harvest
@@ -154,7 +155,7 @@
     g.clickLump();
     const got = g.lumps - before;
     const hit = g.lumpT === pick.t;
-    if (hit) lead = Math.max(40, Math.floor(lead / 2));
+    if (hit) { lead = Math.max(40, Math.floor(lead / 2)); misses = 0; }
     CCA.stat('lumpsHarvested');
     CCA.log(`harvested a ${TYPES[type]} lump (+${got}); next lump: ${TYPES[g.lumpCurrentType]}${hit ? '' : ' (timing missed)'}`);
     restoreBoosts(g);
@@ -187,9 +188,9 @@
     CCA.lock('lump', 20000);                                // keep the building count steady until the click
     if (age < g.lumpRipeAge) applyBoosts(g);
     if (age < g.lumpRipeAge) { restoreBoosts(g); CCA.lock('lump', 0); return; }   // boosts did not get it ripe; try next tick
-    if (!cfg.lumpTiming) {
+    if (!cfg.lumpTiming || misses >= 4) {                   // timing keeps missing (coarse clock, throttled tab): plain click
       const before = g.lumps; g.clickLump();
-      CCA.log(`harvested a lump (+${g.lumps - before})`); restoreBoosts(g); CCA.lock('lump', 0);
+      CCA.log(`harvested a lump (+${g.lumps - before})${misses >= 4 ? ' without exact timing (it kept missing)' : ''}`); misses = 0; restoreBoosts(g); CCA.lock('lump', 0);
       return;
     }
     schedule(g);
@@ -197,23 +198,46 @@
 
   // ---- spending ----
   const MINIGAMES = ['Farm', 'Temple', 'Wizard tower', 'Bank'];
+  // Sugar frenzy: x3 CpS for an hour, once per ascension, for 1 lump. Used an hour or more into a run (so the run is
+  // long enough to profit), and only with a lump to spare beyond the next planned level.
+  function sugarFrenzy(g, nextCost) {
+    const u = g.Upgrades['Sugar frenzy'];
+    if (!cfg.spendLumps || !u || !u.unlocked || u.bought || g.hasBuff('Sugar frenzy')) return;
+    if (Date.now() - g.startDate < 3600e3 || g.lumps < nextCost + 1 || Object.values(g.buffs).some(b => b.multCpS > 1)) return;
+    const ask = g.prefs.askLumps; g.prefs.askLumps = 0;
+    try { u.buy(); } finally { g.prefs.askLumps = ask; }
+    if (g.hasBuff('Sugar frenzy')) { CCA.record('upgrade', 'Sugar frenzy', 1, 0, '1 lump'); CCA.log('Sugar frenzy: x3 CpS for an hour'); }
+  }
   function spendStep(g) {
     if (g.lumps < 1) return;
     let pick = null;
     for (const n of MINIGAMES) { const o = g.Objects[n]; if (o && o.amount > 0 && o.level === 0) { pick = o; break; } }
     const farm = g.Objects.Farm;
     if (!pick && farm.amount > 0 && farm.level < 9) pick = farm;                 // full garden plot
+    // Sugar baking: every unspent lump (up to 100) is +1% to ALL CpS, while a building level is +1% of one building.
+    // So after the minigame levels above, lumps are kept until there are 100 and only the extra ones are spent.
+    const reserve = !pick && cfg.lumpReserve && g.Has('Sugar baking') ? 100 : 0;
+    // Sugar crystal cookies: +1% to ALL CpS for every building type at level 10+, counted toward the levels that lead there
+    const crystal = cfg.levelTen && g.Has('Sugar crystal cookies'), total = g.unbuffedCps || g.cookiesPs || 0;
     if (!pick) {
       let best = 0;
       const allTen = g.ObjectsById.every(o => o.level >= 10);
       for (const o of g.ObjectsById) {
         if (o.amount === 0 || (!allTen && o.level >= 10)) continue;
-        const score = (o.storedTotalCps * 0.01 + 1e-9) / (o.level + 1);           // +1% of the building's output per level
+        let score = (o.storedTotalCps * 0.01 + 1e-9) / (o.level + 1);             // +1% of the building's output per level
+        if (crystal && o.level < 10) {                                            // the whole road to 10, per lump
+          let c = 0; for (let l = o.level + 1; l <= 10; l++) c += l;
+          score = Math.max(score, (0.01 * total + 0.01 * o.storedTotalCps * (10 - o.level)) / c);
+        }
+        if (o.name === 'Wizard tower' && cfg.grimoire) score *= 3;                // levels also raise the magic bar (combos)
         if (score > best) { best = score; pick = o; }
       }
     }
-    if (!pick || g.lumps < pick.level + 1) {
-      if (pick) CCA.status.lumpPlan = `${pick.name} → ${pick.level + 1} (${pick.level + 1} lumps)`;
+    sugarFrenzy(g, reserve ? 0 : pick ? pick.level + 1 : 0);   // x3 for an hour beats 1% for the day a lump takes to regrow
+    if (!pick || g.lumps - (pick.level + 1) < reserve) {
+      if (pick) CCA.status.lumpPlan = reserve && g.lumps < reserve
+        ? `saving for Sugar baking: ${Math.floor(g.lumps)}/100 lumps (+${Math.min(100, Math.floor(g.lumps))}% CpS) · then ${pick.name} → ${pick.level + 1}`
+        : `${pick.name} → ${pick.level + 1} (${pick.level + 1} lumps${reserve ? ' above the 100 kept' : ''})`;
       return;
     }
     const ask = g.prefs.askLumps; g.prefs.askLumps = 0;      // otherwise the game opens a confirm prompt
